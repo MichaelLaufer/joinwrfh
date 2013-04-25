@@ -1,0 +1,7 @@
+The Advanced Regional Prediction System (ARPS), including its pre- and post-processing and data assimilation packages, resides in the public domain and may be used free of charge, and without restriction, including for-profit activities by private industry. Registration, with accurate name, address, phone number, and email address, is required to download the software from this site.
+
+We encourage you to forward any relevant modifications, improvements or derivative work regarding the ARPS software that you create or discover to our attention, and grant us the right to freely distribute your contributions within the ARPS software package, as we do with the current package.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE BOARD OF REGENTS OF THE UNIVERSITY OF OKLAHOMA, ITS OFFICERS, EMPLOYEES, AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE WHETHER OR NOT YOU HAVE ADVISED US OF SUCH DAMAGES.
+
+http://www.caps.ou.edu/ARPS/arpsdown.html

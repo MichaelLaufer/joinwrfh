@@ -1,0 +1,170 @@
+!
+!     ##################################################################
+!     ##################################################################
+!     ######                                                      ######
+!     ######       INPUT FILE FOR JOINWRF IN NAMELIST FORMAT      ######
+!     ######                                                      ######
+!     ######                     Developed by                     ######
+!     ######     Center for Analysis and Prediction of Storms     ######
+!     ######                University of Oklahoma                ######
+!     ######                                                      ######
+!     ##################################################################
+!     ##################################################################
+!
+!
+!-----------------------------------------------------------------------
+!
+! This file contains the input parameters in namelist format for program
+! joinwrf, which joins patches of WRF netCDF files into one large piece.
+! The following assumptions are made:
+!
+!   o The maximum rank of each data set/variable is 5;
+!   o The files are WRF history files in netCDF format.
+!
+! Steps to run the programs:
+!
+!  1. Compile the program
+!     $> makearps [options] joinwrfh
+!
+!  2. Edit namelist input file - this file
+!
+!  3. Run the program
+!     $> bin/joinwrfh < input/joinwrf.input
+!
+!-----------------------------------------------------------------------
+!
+!  Author: Yunheng Wang (04/25/2007)
+!
+!  Modification history:
+!  William.Gustafson@pnl.gov, 16-Feb-2009: Added nocolons option
+!
+!  04/16/2012 (Y. Wang)
+!  Improved attadj option to read extra column or extra row of patches.
+!
+*-----------------------------------------------------------------------
+!
+! WRF input information
+!
+!   dir_extd             The directory that contains the WRF data
+!                        files that are to be converted/processed.
+!
+!   io_form              WRF history data format
+!                      = 1, WRF internal binary format
+!                      = 5, PHDF5 format
+!                      = 7, NetCDF format
+!
+!  filename_convention  How to construct the file name
+!                      = 0, WRF history output (ARW), 'wrfout_d01_YYYY-MM-DD_HH:MM:SS[_xxxx]'
+!                      = 1, WPS metgrid output (ARW), 'met_em.d01.YYYY-MM-DD_HH:MM:SS.nc[_xxxx]'
+!                      = 2, WPS metgrid output (NMM), 'met_nmm.d01.YYYY-MM-DD_HH:MM:SS.nc[_xxxx]'
+!                      = 3, WRF history output (NMM), 'wrfout_d01_YYYY-MM-DD_HH:MM:SS[_xxxx]'
+!
+!   nocolons             Use colons or underscores for time in file name
+!                      = .false., use colons
+!                      = .true.,  use underscores
+!
+!  magnitude_processor Magnitude of the number processors for split WRF
+!                files. The parameter was added for CAPS spring 2010
+!                experiments where we had used 14,400 processors on Athena
+!                for 1km experiments, which is larger than 10,000 - the maximum
+!                allowable in the WRF system. So the file appendix must be
+!                5 digits in length instead of the default 4.
+!          = 4, (default)
+!          = 5, for 5 digits appendix with WRF/METO split files
+!
+!  start_time_str:          WRF history started time string as:
+!                           'YYYY-MM-DD_HH:MM:SS'
+!  history_interval:        WRF history dump interval string as:
+!                                   'DD_HH:MM:SS'
+!  end_time_str:            WRF history ended time string.
+!
+!    NOTE: if you are converting all WRF history dumps at one time,
+!          start_time_str should be the same as init_time_str. On
+!          the other hand, if the WRF history dumps is converting
+!          one by one, start_time_str is the same as end_time_str and
+!          init_time_str should be the start time of the WRF model.
+!
+!----------------------------------------------------------------------=*
+!
+ &wrfdfile
+   dir_extd            = './',
+   grid_id             = 1,
+   filename_convention = 0,
+   nocolons            = .false.,
+   magnitude_processor = 4,
+
+   start_time_str      = '1998-05-25_00:00:00',
+   history_interval    =         '00_01:30:00',
+   end_time_str        = '1998-05-25_06:00:00',
+ /
+
+*-----------------------------------------------------------------------
+!
+!  Patches      Specify the patches to be joined
+!
+!    NOTE:  All patches must form a square subdomain.
+!
+!  proc_sw      No. of procs in the lower-left corner of the subdomain to be joined
+!  nproc_x      Number of procs in the west-east direction of the subdomain.
+!  nproc_y      Number of procs in the south-north direction of the subdomain.
+!  nproc_xin    Original nproc_x when running WRF. We want to know
+!               the configuration to get the process numbers.
+!  nproc_yin    Original nproc_y when running WRF. It is required when
+!               attadj is .TRUE..
+!              = 0, unknown, the program will make a wild guess.
+!
+!----------------------------------------------------------------------=*
+
+ &patches
+   proc_sw = 0,
+   nproc_x = 6,
+   nproc_y = 11,
+   nproc_xin = 0,
+   nproc_yin = 0,
+ /
+
+*-----------------------------------------------------------------------
+!
+! Output
+!  outdirname   Name of directory for writting output files
+!  outfiletail  File name tail to be appended.
+!  jointime     Whether to join all time levels into one file
+!              = F, No, the UNLIMITED dimension keeps the same
+!              = T, Yes, Join all data into one file with multiple
+!                   UNLIMITED dimension.
+!  attadj       Whether to adjust the attributs in output file to make
+!               it looks like outputs from an independent WRF run.
+!  nvarout      Number of varibles to be writen in the joined file
+!               = 0, all variables in the patch files
+!               > 0, should specify variable names in varlist below
+!  varlist      Character arrays of size nvarout containing name
+!               of variables to be written in the joined file.
+!
+!  istride      Grid points to be skipped in X direction
+!  jstride      Grid points to be skipped in Y direction
+!               They are used for thinning a WRF grid with large resolution.
+!              = 1, (default) no skipping.
+!
+!----------------------------------------------------------------------=*
+
+ &output
+   outdirname = './',
+   jointime = .FALSE.,
+   nvarout = 0,
+     varlist(1) = 'u',
+     varlist(2) = 'v',
+ /
+
+*-----------------------------------------------------------------------
+!
+! Debugging  Namelist for program debugging
+!
+!   debug = 0, no debugging messages will be written.
+!         = 1, Write important milestons
+!         = 2, Write more detailed messages
+!
+!----------------------------------------------------------------------=*
+
+ &debugging
+   debug = 0,
+ /
