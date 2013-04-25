@@ -156,6 +156,12 @@ SUBROUTINE check_files_dimensions(MAXWRFFIL,grid_id,fileconv,           &
         ELSE
           CALL get_wrf_patch_indices(TRIM(tmpstr),io_form,              &
                          ips,ipe,ipss,ipse,jps,jpe,jpss,jpse,nx,ny,istatus)
+!          ## JH 27.06.2012
+!          WRITE(6,'(8x,2(a,I5))') 'nx= ',nx,', ny= ',ny
+!          WRITE(6,'(8x,2(a,I4))') 'npx= ',npx,', npy= ',npy
+!          WRITE(6,'(8x,4(a,I5))') 'ips:',ips,' ipe:',ipe,' ipss:',ipss,' ipse:',ipse
+!          WRITE(6,'(8x,4(a,I5))') 'jps:',jps,' jpe:',jpe,' jpss:',jpss,' jpse:',jpse
+!          ##
           IF (istatus /= 0) EXIT
 
           IF (.NOT. dset) THEN
@@ -234,6 +240,12 @@ SUBROUTINE check_files_dimensions(MAXWRFFIL,grid_id,fileconv,           &
 
           WRITE(6,'(3x,a,I2.2,a,I4,a,/,5x,a)')                            &
              'WRF file ',nextdfil,': patch - ',n,' =', TRIM(tmpstr)
+!          ## JH 27.06.2012
+!          WRITE(6,'(8x,2(a,I5))') 'nx= ',nx,', ny= ',ny
+!          WRITE(6,'(8x,2(a,I5))') 'npx= ',npx,', npy= ',npy
+!          WRITE(6,'(8x,4(a,I5))') 'ips:',ips,' ipe:',ipe,' ipss:',ipss,' ipse:',ipse
+!          WRITE(6,'(8x,4(a,I5))') 'jps:',jps,' jpe:',jpe,' jpss:',jpss,' jpse:',jpse
+!          ##
         END IF
       END DO
     END DO
@@ -360,12 +372,11 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
   CHARACTER(LEN=32) :: dimname
 
   INTEGER :: nxid, nyid, nxlg, nylg, nxsid, nysid, nxslg, nyslg
-  INTEGER :: narrsize, narrisizemax, narrasizemax
   INTEGER :: unlimdimid, unlimdimlen, unlimodimlen, odimid
-  INTEGER :: ndims, dimid, dimlen
+  INTEGER :: ndims, dimid, dimlen, narrsize
 
   INTEGER :: dimina(NF_MAX_DIMS)         ! Dimension size in original file
-  !INTEGER :: dimouta(NF_MAX_DIMS)        ! Dimension size in joined files
+  INTEGER :: dimouta(NF_MAX_DIMS)        ! Dimension size in joined files
 
   !
   ! Attribute variables
@@ -404,13 +415,20 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
   INTEGER :: vartype, varndims, varnatts
   INTEGER :: vardimids(MAX_RANK)
   INTEGER :: startidx(MAX_RANK), countidx(MAX_RANK), strideidx(MAX_RANK)
-  INTEGER :: outstart(MAX_RANK), outstride(MAX_RANK)
+  INTEGER :: outstart(MAX_RANK), outcount(MAX_RANK)
+  INTEGER :: outcount3d(3), outcount4d(4)
   INTEGER :: vardim, vdimid
 
   INTEGER :: varidlists(NF_MAX_VARS), varoutidlists(NF_MAX_VARS)
 
   INTEGER, ALLOCATABLE :: varari(:)
   REAL,    ALLOCATABLE :: vararr(:)
+  INTEGER, ALLOCATABLE, DIMENSION(:,:) :: varai2d
+  INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: varai3d
+  INTEGER, ALLOCATABLE, DIMENSION(:,:,:,:) :: varai4d
+  REAL, ALLOCATABLE, DIMENSION(:,:) :: varar2d
+  REAL, ALLOCATABLE, DIMENSION(:,:,:) :: varar3d
+  REAL, ALLOCATABLE, DIMENSION(:,:,:,:) :: varar4d
   CHARACTER(LEN=256)   :: tmpstr,fmtstr
 
 !@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -426,13 +444,10 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
   nyslg = jdse-jdss+1
 
   startidx(:)  = 1
-  narrisizemax = 0
-  narrasizemax = 0
-
   unlimdimlen  = 1
 
   istatus = 0
-  DO nf = 1,nfile
+  files_loop: DO nf = 1,nfile
 
 !-----------------------------------------------------------------------
 !
@@ -494,23 +509,23 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
 
         diminnames(dimid) = dimname
         dimina(dimid)  = dimlen             ! Save dimension id and len
-        !dimouta(dimid) = dimlen             ! Output dimension id and len
+        dimouta(dimid) = dimlen             ! Output dimension id and len
         IF (dimid == nxid) THEN
           dimlen = nxlg
           dimlen = (dimlen-1)/istride+1
-          !dimouta(dimid) = dimlen
+          dimouta(dimid) = dimlen
         ELSE IF (dimid == nxsid) THEN
           dimlen = nxslg
           dimlen = (dimlen-1)/istride+1
-          !dimouta(dimid) = dimlen
+          dimouta(dimid) = dimlen
         ELSE IF (dimid == nyid) THEN
           dimlen = nylg
           dimlen = (dimlen-1)/jstride+1
-          !dimouta(dimid) = dimlen
+          dimouta(dimid) = dimlen
         ELSE IF (dimid == nysid) THEN
           dimlen = nyslg
           dimlen = (dimlen-1)/jstride+1
-          !dimouta(dimid) = dimlen
+          dimouta(dimid) = dimlen
         ELSE IF (dimid == unlimdimid) THEN
           dimlen = NF_UNLIMITED
         END IF
@@ -705,7 +720,7 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
 
       IF (debug > 0) WRITE(6,'(5x,a,I4)') 'Defining variables - ',nvarout
 
-      DO n = 1,nvarout
+      nvarout_loop: DO n = 1,nvarout
         varid = varidlists(n)
         istatus = nf_inq_var(finid,varid,varname,vartype,varndims,vardimids,varnatts)
         IF (istatus /= NF_NOERR) CALL handle_err(istatus)
@@ -726,7 +741,7 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
         END DO
 
-      END DO
+      END DO nvarout_loop
 
       istatus = nf_enddef(foutid)
       IF (istatus /= NF_NOERR) CALL handle_err(istatus)
@@ -743,12 +758,19 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
 
 !-----------------------------------------------------------------------
 !
-! Write each patch to the merged file
+! Loop over each variable and allocate it for each patch, in the end write to merged file
 !
 !-----------------------------------------------------------------------
 
-    ispatch(:) = .FALSE.
-    patch_loop: DO n = 1,npatch
+    var_loop: DO nvar = 1, nvarout
+     WRITE(6,'(a,I2,a,I2,a)') ' ### var_loop ',nvar,' from ',nvarout,' ###'
+
+     varid = varidlists(nvar)
+     vardimids(:) = 0
+
+     ispatch(:) = .FALSE.
+     patch_loop: DO n = 1, npatch
+      WRITE(6,'(a,I4,a,I4,a)') ' ### patch_loop ',n,' from ',npatch,' ###'
       IF (jointime .AND. npatch == 1) THEN
         WRITE(infilename, '(a)')       TRIM(filenames(nf))
       ELSE
@@ -804,370 +826,316 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
 
 !-----------------------------------------------------------------------
 !
-! loop over each variable
+!    Handle dimensions
 !
 !-----------------------------------------------------------------------
 
-      var_loop: DO nvar = 1,nvarout
+     istatus = nf_inq_var(finid,varid,varname,vartype,varndims,vardimids,varnatts)
+     IF (istatus /= NF_NOERR) CALL handle_err(istatus)
 
-        varid = varidlists(nvar)
+     startidx(:)  = 1  ! read from nc (nf_get_vars), where to start
+     countidx(:)  = 1  ! read from nc (nf_get_vars), how far to read (vector) 
+     strideidx(:) = 1  ! read from nc (nf_get_vars)
+     outstart(:)  = 1  ! write to nc, vector length of subdomain
+     outcount(:)  = 1  ! write to nc, dim of field to write to output
+     narrsize = 1      ! for allocation of 2d variables
 
-        vardimids(:) = 0
-        istatus = nf_inq_var(finid,varid,varname,vartype,varndims,vardimids,varnatts)
-        IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-!-----------------------------------------------------------------------
-!
-! Handle dimensions
-!
-!-----------------------------------------------------------------------
-
-        startidx(:)  = 1
-        countidx(:)  = 1
-        strideidx(:) = 1
-        outstart(:)    = 1
-        outstride(:)   = 1
-        narrsize = 1
-
-        istart = 1
-        iend   = 1
-        jstart = 1
-        jend   = 1
-        DO vardim = 1, varndims
-          vdimid = vardimids(vardim)
-          countidx(vardim) = dimina (vdimid)
-          IF ( vdimid == nxid) THEN
-            imod = MOD((ips-ids),istride)
-            IF (imod == 0) THEN
-              startidx(vardim) = 1
-            ELSE
-              startidx(vardim) = istride - imod + 1
-            END IF
-            istart = ips+startidx(vardim)-1    ! start index relative to global domain
-            iend   = MIN(ipe,ide)
-            IF (iend < istart) THEN
-              countidx(vardim)  = 0
-            ELSE
-              countidx(vardim)  = (iend-istart)/istride + 1
-            END IF
-            strideidx(vardim) = istride
-
-            outstart(vardim) = (istart-ids)/istride + 1
-            ispatch(nvar) = .TRUE.
-
-          ELSE IF ( vdimid == nyid) THEN
-            jmod = MOD((jps-jds),jstride)
-            IF (jmod == 0) THEN
-              startidx(vardim) = 1
-            ELSE
-              startidx(vardim) = jstride - jmod + 1
-            END IF
-            jstart = jps+startidx(vardim)-1
-            jend   = MIN(jpe,jde)
-            IF (jend < jstart) THEN
-              countidx(vardim)  = 0
-            ELSE
-              countidx(vardim)  = (jend-jstart)/jstride + 1
-            END IF
-            strideidx(vardim) = jstride
-
-            outstart(vardim) = (jstart - jds)/jstride + 1
-            ispatch(nvar) = .TRUE.
-
-          ELSE IF ( vdimid == nxsid) THEN
-            imod = MOD((ipss-idss),istride)
-            IF (imod == 0) THEN
-              startidx(vardim) = 1
-            ELSE
-              startidx(vardim) = istride - imod + 1
-            END IF
-            istart = ipss+startidx(vardim)-1
-            iend   = MIN(ipse,idse)
-            IF (iend < istart) THEN
-              countidx(vardim)  = 0
-            ELSE
-              countidx(vardim)  = (iend-istart)/istride + 1
-            END IF
-            strideidx(vardim) = istride
-
-            outstart(vardim) = (istart - idss)/istride + 1
-            ispatch(nvar) = .TRUE.
-          ELSE IF ( vdimid == nysid) THEN
-            jmod = MOD((jpss-jdss),jstride)
-            IF (jmod == 0) THEN
-              startidx(vardim) = 1
-            ELSE
-              startidx(vardim) = jstride - jmod + 1
-            END IF
-            jstart = jpss+startidx(vardim)-1
-            jend   = MIN(jpse,jdse)
-            IF (jend < jstart) THEN
-              countidx(vardim)  = 0
-            ELSE
-              countidx(vardim)  = (jend-jstart)/jstride + 1
-            END IF
-            strideidx(vardim) = jstride
-
-            outstart(vardim) = (jstart - jdss)/jstride + 1
-            ispatch(nvar) = .TRUE.
-          ELSE IF (vdimid == unlimdimid) THEN
-            outstart(vardim) = unlimdimlen
-            IF (unlimodimlen <= 0) THEN
-              unlimodimlen = countidx(vardim)
-            ELSE
-              IF ( unlimodimlen /= countidx(vardim)) THEN
-                WRITE(6,'(1x,a,/)') 'ERROR: Inconsisten size for UNLIMITED dimension.'
-                istatus = -1
-                RETURN
-              END IF
-            END IF
-          ELSE
-            outstart(vardim) = 1
-          END IF
-
-          IF (countidx(vardim) <= 0) THEN
-            IF (debug > 0) THEN
-              WRITE(6,'(9x,2a)') 'Processing variables - ',TRIM(varname)
-              WRITE(6,'(12x,a,i0,3a)')                                  &
-                'Path ',n,' skipped because dimension "',               &
-                TRIM(diminnames(vdimid)),'" has zero length.'
-            END IF
-            CYCLE var_loop
-          END IF
-
-          narrsize = countidx(vardim)*narrsize
-        END DO
-
-        IF ( n > 1 .AND. (.NOT. ispatch(nvar)) ) THEN
-          IF (debug > 2) WRITE(6,'(9x,3a)') 'Variable ',TRIM(varname),' skipped.'
-          CYCLE
-        ELSE
-          IF (debug > 2) THEN
-            WRITE(6,'(9x,3a,I2)')                                       &
-            'Processing variables - ',TRIM(varname),' with rank = ',varndims
-
-            DO vardim = 1,varndims
-              vdimid = vardimids(vardim)
-              WRITE(6,'(12x,a,4(a,I4))') diminnames(vdimid),            &
-              ', outstart = ',outstart(vardim),', size = ', countidx(vardim), &
-              ' <-- start = ',startidx(vardim),', stride = ',strideidx(vardim)
-            END DO
-          END IF
-        END IF
-
-        ! do not have to merge, use values from the first file
-
-!        IF (.NOT. ispatch(nvar)) THEN
-!
-!          IF (debug > 0) WRITE(6,'(9x,2a)') 'Copying variables - ',TRIM(varname)
-!
-!          istatus = NF_COPY_VAR(finid,varid,foutid)
-!          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-!
-!        ELSE
-          ovarid = varoutidlists(nvar)
-
-          IF (debug > 0) WRITE(6,'(9x,3a,I4)')                          &
-             'Copying variables - ',TRIM(varname),' from patch: ',n
-
-          SELECT CASE (vartype)
-
-!-----------------------------------------------------------------------
-!
-! Integers
-!
-!-----------------------------------------------------------------------
-
-          CASE (NF_INT)
-
-            IF (narrsize > narrisizemax) THEN   ! Allocate input array only when necessary
-              IF (ALLOCATED(varari)) DEALLOCATE(varari, STAT = istatus)
-              ALLOCATE(varari(narrsize), STAT = istatus)
-              narrisizemax = narrsize
-            END IF
-
-            istatus = NF_GET_VARS_INT(finid,varid,startidx,countidx,strideidx,varari)
-            IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-            istatus = nf_put_vara_INT(foutid,ovarid,outstart,countidx,varari)
-            IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-!-----------------------------------------------------------------------
-!
-! Reals
-!
-!-----------------------------------------------------------------------
-
-          CASE (NF_FLOAT)
-
-            IF (narrsize > narrasizemax) THEN   ! Allocate input array only when necessary
-              IF (ALLOCATED(vararr)) DEALLOCATE(vararr, STAT = istatus)
-              ALLOCATE(vararr(narrsize), STAT = istatus)
-              narrasizemax = narrsize
-            END IF
-
-            istatus = NF_GET_VARS_REAL(finid,varid,startidx,countidx,strideidx,vararr)
-            IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-            istatus = nf_put_vara_REAL(foutid,ovarid,outstart,countidx,vararr)
-            IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-!-----------------------------------------------------------------------
-!
-! Character string
-!
-!-----------------------------------------------------------------------
-
-          CASE (NF_CHAR)
-
-            istatus = NF_GET_VARS_TEXT(finid,varid,startidx,countidx,strideidx,tmpstr)
-            IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-            istatus = nf_put_vara_TEXT(foutid,ovarid,outstart,countidx,TRIM(tmpstr))
-            IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-
-          CASE DEFAULT
-            WRITE(6,'(1x,a,I2)') 'ERROR: unsupported variable type = ',vartype
-            istatus = -4
-            RETURN
-          END SELECT
-!        END IF  ! ispatch(nvar)
-
-        !
-        ! Added to find the new CEN_LON & CEN_LAT
-        !
-        IF (attadj .AND. (oldlatidx1 >= jps .AND. oldlatidx1 <= jpe) .AND.  &
-                         (oldlonidx1 >= ips .AND. oldlonidx1 <= ipe) ) THEN
-
-          IF ( .NOT. lonavg .AND. latavg ) THEN      ! at U point
-
-            IF (TRIM(varname) == 'XLONG_U' .OR. TRIM(varname) == 'XLAT_U' ) THEN
-              newlatidx = (oldlatidx1-jstart)/jstride     ! 0-base
-              newlonidx = (oldlonidx1-istart)/istride+1   ! 1-base
-              strlen = newlatidx*countidx(1)+newlonidx
-
-              IF (TRIM(varname) == 'XLONG_U' ) THEN
-                newctrlon = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,I4,a,F8.2)')                 &
-                   'new cen_lon at U point. lonidx = ',newlonidx,', newctrlon = ',newctrlon
-                lonset = lonset+1
-              ELSE IF (TRIM(varname) == 'XLAT_U') THEN
-                newctrlat = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,I4,a,F8.2)')              &
-                     'new cen_lat at U point. latidx = ',newlatidx,', newctrlat = ',newctrlat
-                latset = latset+1
-              END IF
-            END IF
-
-          END IF
-
-          IF ( lonavg .AND. .NOT. latavg ) THEN      ! at V point
-            IF (TRIM(varname) == 'XLONG_V' .OR. TRIM(varname) == 'XLAT_V'  ) THEN
-              newlatidx = (oldlatidx1-jstart)/jstride
-              newlonidx = (oldlonidx1-istart)/istride+1
-              strlen = newlatidx*countidx(1)+newlonidx
-
-              IF (TRIM(varname) == 'XLONG_V' ) THEN
-                newctrlon = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,I4,a,F8.2)')              &
-                   'new cen_lon at V point. lonidx = ',newlonidx,', newctrlon = ',newctrlon
-
-                lonset = lonset+1
-              ELSE IF (TRIM(varname) == 'XLAT_V') THEN
-                newctrlat = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,I4,a,F8.2)')              &
-                   'new cen_lat at V point. latidx = ',newlatidx,', newctrlat = ',newctrlat
-                latset = latset+1
-              END IF
-
-            END IF
-          END IF
-
-          IF ( lonavg .AND. latavg ) THEN            ! at M point
-            IF (TRIM(varname) == 'XLONG' .OR. TRIM(varname) == 'XLAT'  ) THEN
-              newlatidx = (oldlatidx1-jstart)/jstride
-              newlonidx = (oldlonidx1-istart)/istride+1
-              strlen = newlatidx*countidx(1)+newlonidx
-              IF (TRIM(varname) == 'XLONG' ) THEN
-                newctrlon = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,I4,a,F8.2)')              &
-                   'new cen_lon at M point. lonidx = ',newlonidx,', newctrlon = ',newctrlon
-                lonset = lonset+1
-              ELSE IF (TRIM(varname) == 'XLAT' ) THEN
-                newctrlat = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,I4,a,F8.2)')                &
-                   'new cen_lat at M point. latidx = ',newlatidx,', newctrlat = ',newctrlat
-                latset = latset+1
-              END IF
-            END IF
-
-          END IF
-
-          IF ( .NOT. lonavg .AND. .NOT. latavg ) THEN ! at grid point
-            IF (TRIM(varname) == 'XLONG_U' .OR. TRIM(varname) == 'XLAT_V'  ) THEN
-              newlatidx = (oldlatidx1-jstart)/jstride
-              newlonidx = (oldlonidx1-istart)/istride+1
-              strlen = newlatidx*countidx(1)+newlonidx
-              IF (TRIM(varname) == 'XLONG_U' ) THEN
-                lon1 = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,F8.2,a,2I4)')               &
-                    'set lon1 = ',lon1,' at = ',newlatidx+1,newlonidx
-              ELSE IF (TRIM(varname) == 'XLAT_V' ) THEN
-                lat1 = vararr(strlen)
-                IF (debug > 1) WRITE(6,'(9x,a,F8.2,a,2I4)')               &
-                    'set lat1 = ',lat1,' at = ',newlatidx+1,newlonidx
-              END IF
-            END IF
-
-          END IF
-
-        END IF
-
-        IF (attadj .AND. (oldlatidx1 >= jps .AND. oldlatidx1 <= jpe) .AND.  &
-                         (oldlonidx2 >= ips .AND. oldlonidx2 <= ipe) ) THEN
-
-          IF ( .NOT. lonavg .AND. .NOT. latavg ) THEN ! at grid point
-
-            IF (TRIM(varname) == 'XLAT_V') THEN
-              newlatidx = (oldlatidx1-jstart)/jstride
-              newlonidx = (oldlonidx2-istart)/istride+1
-              strlen = newlatidx*countidx(1)+newlonidx
-              lat2 = vararr(strlen)
-              IF (debug > 1) WRITE(6,'(9x,a,F8.2,a,2I4)')               &
-                  'set lat2 = ',lat2,' at = ',newlatidx+1,newlonidx
-            END IF
-
-          END IF
-
-        END IF
-
-        IF (attadj .AND. (oldlatidx2 >= jps .AND. oldlatidx2 <= jpe) .AND.  &
-                         (oldlonidx1 >= ips .AND. oldlonidx1 <= ipe) ) THEN
-
-         IF ( .NOT. lonavg .AND. .NOT. latavg ) THEN ! at grid point
-
-           IF (TRIM(varname) == 'XLONG_U') THEN
-             newlatidx = (oldlatidx2-jstart)/jstride
-             newlonidx = (oldlonidx1-istart)/istride+1
-             strlen = newlatidx*countidx(1)+newlonidx
-             lon2 = vararr(strlen)
-             IF (debug > 1) WRITE(6,'(9x,a,F8.2,a,2I4)')               &
-                'set lon2 = ',lon2,' at = ',newlatidx+1,newlonidx
-           END IF
-
+     istart = 1
+     iend   = 1
+     jstart = 1
+     jend   = 1
+     vardims_loop: DO vardim = 1, varndims
+       vdimid = vardimids(vardim)
+       countidx(vardim) = dimina(vdimid)
+       outcount(vardim) = dimina(vdimid)
+       IF ( vdimid == nxid) THEN
+         imod = MOD((ips-ids),istride)
+         IF (imod == 0) THEN
+           startidx(vardim) = 1
+         ELSE
+           startidx(vardim) = istride - imod + 1
          END IF
+         istart = ips+startidx(vardim)-1    ! start index relative to global domain
+         iend   = MIN(ipe,ide)
+         IF (iend < istart) THEN
+            countidx(vardim)  = 0
+         ELSE
+            countidx(vardim)  = (iend-istart)/istride + 1
+         END IF
+         strideidx(vardim) = istride
 
+         outstart(vardim) = (istart-ids)/istride + 1
+         outcount(vardim) = ide
+         ispatch(nvar) = .TRUE.
+       ELSE IF ( vdimid == nyid) THEN
+         jmod = MOD((jps-jds),jstride)
+         IF (jmod == 0) THEN
+           startidx(vardim) = 1
+         ELSE
+           startidx(vardim) = jstride - jmod + 1
+         END IF
+         jstart = jps+startidx(vardim)-1
+         jend   = MIN(jpe,jde)
+         IF (jend < jstart) THEN
+           countidx(vardim)  = 0
+         ELSE
+           countidx(vardim)  = (jend-jstart)/jstride + 1
+         END IF
+         strideidx(vardim) = jstride
+
+         outstart(vardim) = (jstart - jds)/jstride + 1
+         outcount(vardim) = jde
+         ispatch(nvar) = .TRUE.
+       ELSE IF ( vdimid == nxsid) THEN
+         imod = MOD((ipss-idss),istride)
+         IF (imod == 0) THEN
+           startidx(vardim) = 1
+         ELSE
+           startidx(vardim) = istride - imod + 1
+         END IF
+         istart = ipss+startidx(vardim)-1
+         iend   = MIN(ipse,idse)
+         IF (iend < istart) THEN
+           countidx(vardim)  = 0
+         ELSE
+           countidx(vardim)  = (iend-istart)/istride + 1
+         END IF
+         strideidx(vardim) = istride
+
+         outstart(vardim) = (istart - idss)/istride + 1
+         outcount(vardim) = idse
+         ispatch(nvar) = .TRUE.
+       ELSE IF ( vdimid == nysid) THEN
+         jmod = MOD((jpss-jdss),jstride)
+         IF (jmod == 0) THEN
+           startidx(vardim) = 1
+         ELSE
+           startidx(vardim) = jstride - jmod + 1
+         END IF
+         jstart = jpss+startidx(vardim)-1
+         jend   = MIN(jpse,jdse)
+         IF (jend < jstart) THEN
+           countidx(vardim)  = 0
+         ELSE
+           countidx(vardim)  = (jend-jstart)/jstride + 1
+         END IF
+         strideidx(vardim) = jstride
+
+         outstart(vardim) = (jstart - jdss)/jstride + 1
+         outcount(vardim) = jdse
+         ispatch(nvar) = .TRUE.
+       ELSE IF (vdimid == unlimdimid) THEN
+         outstart(vardim) = unlimdimlen
+         IF (unlimodimlen <= 0) THEN
+           unlimodimlen = countidx(vardim)
+         ELSE
+           IF ( unlimodimlen /= countidx(vardim)) THEN
+             WRITE(6,'(1x,a,/)') 'ERROR: Inconsisten size for UNLIMITED dimension.'
+             istatus = -1
+             RETURN
+           END IF
+         END IF
+       ELSE
+         outstart(vardim) = 1
+       END IF
+
+       IF (countidx(vardim) <= 0) THEN
+         IF (debug > 0) THEN
+           WRITE(6,'(9x,2a)') 'Processing variables - ',TRIM(varname)
+           WRITE(6,'(12x,a,i0,3a)')                                  &
+             'Path ',n,' skipped because dimension "',               &
+             TRIM(diminnames(vdimid)),'" has zero length.'
+          END IF
+          CYCLE var_loop
+       END IF
+       narrsize = countidx(vardim)*narrsize
+     END DO vardims_loop
+
+     IF ( n > 1 .AND. (.NOT. ispatch(nvar)) ) THEN
+       IF (debug > 2) WRITE(6,'(9x,3a)') 'Variable ',TRIM(varname),' skipped.'
+       CYCLE
+     ELSE
+       IF (debug > 1) THEN
+         WRITE(6,'(9x,3a,I2)')                                       &
+         'Processing variables - ',TRIM(varname),' with rank = ',varndims
+
+         DO vardim = 1,varndims
+           vdimid = vardimids(vardim)
+           WRITE(6,'(12x,a,4(a,I4))') diminnames(vdimid),            &
+           ', outstart = ',outstart(vardim),', size = ', countidx(vardim), &
+           ' <-- start = ',startidx(vardim),', stride = ',strideidx(vardim)
+         END DO
+       END IF
+     END IF
+
+     ovarid = varoutidlists(nvar)
+
+!     IF (debug > 0) WRITE(6,'(9x,3a,I4)')                          &
+!          'Copying variables - ',TRIM(varname),' from patch: ',n
+
+      IF ( varndims == 3 ) THEN
+        outcount3d = outcount(1:3)
+      ELSEIF ( varndims == 4 ) THEN
+        outcount4d = outcount(1:4)
+      END IF
+
+      SELECT CASE (vartype)
+
+!-----------------------------------------------------------------------
+!
+!     integers
+!
+!-----------------------------------------------------------------------
+
+      CASE (NF_INT)
+      IF (debug> 1 ) WRITE(6,*) '### CASE integers'
+
+!     ALLOCATE space for one variable and all patches
+        IF (n == 1 .and. varndims == 2) THEN
+          IF (ALLOCATED(varari)) DEALLOCATE(varari, STAT = istatus)
+          ALLOCATE(varari(narrsize), STAT = istatus)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( n == 1 .and. varndims == 3 ) THEN
+          IF (ALLOCATED(varai3d)) DEALLOCATE(varai3d,STAT = istatus)
+          ALLOCATE(varai3d(outcount3d(1),outcount3d(2),outcount3d(3)),STAT = istatus)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( n == 1 .and. varndims == 4 ) THEN
+          IF (ALLOCATED(varai4d)) DEALLOCATE(varai4d,STAT = istatus)
+          ALLOCATE(varai4d(outcount4d(1),outcount4d(2),outcount4d(3),    &
+             outcount4d(4)),STAT = istatus)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
         END IF
 
-      END DO var_loop
+!     READ data from patch
+        IF ( varndims == 2 ) THEN
+          WRITE(6,*) 'READ 2D INTEGER'
+          istatus = NF_GET_VARS_INT(finid,varid,startidx,countidx,strideidx,varari)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( varndims == 3 ) THEN
+          istatus = NF_GET_VARS_INT(finid,varid,startidx,countidx,strideidx,   &
+            varai3d(outstart(1):outstart(1)+countidx(1)-1,                     &
+            outstart(2):outstart(2)+countidx(2)-1,1:outcount3d(3)))
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( varndims == 4 ) THEN
+          istatus = NF_GET_VARS_INT(finid,varid,startidx,countidx,strideidx,   &
+            varai4d(outstart(1):outstart(1)+countidx(1)-1,                     &
+            outstart(2):outstart(2)+countidx(2)-1,                             &
+            outstart(3):outstart(3)+countidx(3)-1,                             &
+            1:outcount4d(4)))
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        END IF
 
-      istatus = nf_close(finid)                              ! Close file
+!     WRITE allocated data to final file
+        IF( varndims == 2 ) THEN
+          istatus = nf_put_vara_INT(foutid,ovarid,outstart,countidx,varari)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+          DEALLOCATE(varari)
+        END IF
+        IF (n == npatch .and. varndims == 3 ) THEN
+          istatus = nf_put_vara_INT(foutid,ovarid,(/1,1,1/),outcount3d,varai3d)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+          DEALLOCATE(varai3d)
+        ELSEIF (n == npatch .and. varndims == 4 ) THEN
+          istatus = nf_put_vara_INT(foutid,ovarid,(/1,1,1,1/),outcount4d,varai4d)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+          DEALLOCATE(varai4d)
+        ENDIF
+        !istatus = nf_put_vara_INT(foutid,ovarid,(/1,1,1/),(/ide-1,jde-1,countidx(3)/),varai)
+        !istatus = nf_put_var_INT(foutid,ovarid,varai)
+        !istatus = nf_put_vara_INT(foutid,ovarid,outstart,countidx,varari)
+
+!-----------------------------------------------------------------------
+!
+!     reals
+!
+!-----------------------------------------------------------------------
+
+      CASE (NF_FLOAT)
+      IF (debug> 1 ) WRITE(6,*) '### CASE reals'
+
+!     ALLOCATE space for one variable and all patches
+        IF (n == 1 .and. varndims == 2) THEN
+          IF (ALLOCATED(vararr)) DEALLOCATE(vararr, STAT = istatus)
+          ALLOCATE(vararr(narrsize), STAT = istatus)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( n == 1 .and. varndims == 3 ) THEN
+          IF (ALLOCATED(varar3d)) DEALLOCATE(varar3d,STAT = istatus)
+          ALLOCATE(varar3d(outcount3d(1),outcount3d(2),outcount3d(3)),STAT = istatus)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( n == 1 .and. varndims == 4 ) THEN
+          IF (ALLOCATED(varar4d)) DEALLOCATE(varar4d,STAT = istatus)
+          ALLOCATE(varar4d(outcount4d(1),outcount4d(2),outcount4d(3),    &
+             outcount4d(4)),STAT = istatus)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        END IF
+
+!     READ data from patch
+        IF ( varndims == 2 ) THEN
+          istatus = NF_GET_VARS_REAL(finid,varid,startidx,countidx,strideidx,vararr)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( varndims == 3 ) THEN
+          istatus = NF_GET_VARS_REAL(finid,varid,startidx,countidx,strideidx,   &
+            varar3d(outstart(1):outstart(1)+countidx(1)-1,                     &
+            outstart(2):outstart(2)+countidx(2)-1,1:outcount3d(3)))
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        ELSEIF ( varndims == 4 ) THEN
+          istatus = NF_GET_VARS_REAL(finid,varid,startidx,countidx,strideidx,  &
+            varar4d(outstart(1):outstart(1)+countidx(1)-1,                     &
+            outstart(2):outstart(2)+countidx(2)-1,                             &
+            outstart(3):outstart(3)+countidx(3)-1,                             &
+            1:outcount4d(4)))
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+        END IF
+
+!     WRITE allocated data to final file
+        IF( varndims == 2 ) THEN
+          istatus = nf_put_vara_REAL(foutid,ovarid,outstart,countidx,vararr)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+          DEALLOCATE(vararr)
+        END IF
+        IF (n == npatch .and. varndims == 3 ) THEN
+          istatus = nf_put_vara_REAL(foutid,ovarid,(/1,1,1/),outcount3d,varar3d)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+          DEALLOCATE(varar3d)
+        ELSEIF (n == npatch .and. varndims == 4 ) THEN
+          istatus = nf_put_vara_REAL(foutid,ovarid,(/1,1,1,1/),outcount4d,varar4d)
+          IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+          DEALLOCATE(varar4d)
+        ENDIF
+
+!-----------------------------------------------------------------------
+!
+!     Character string
+!
+!-----------------------------------------------------------------------
+
+      CASE (NF_CHAR)
+      IF (debug> 1 ) WRITE(6,*) '### CASE strings'
+
+      istatus = NF_GET_VARS_TEXT(finid,varid,startidx,countidx,strideidx,tmpstr)
       IF (istatus /= NF_NOERR) CALL handle_err(istatus)
-    END DO patch_loop
+
+      istatus = nf_put_vara_TEXT(foutid,ovarid,outstart,countidx,TRIM(tmpstr))
+      IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+
+      CASE DEFAULT
+        WRITE(6,'(1x,a,I2)') 'ERROR: unsupported variable type = ',vartype
+        istatus = -4
+        RETURN
+      END SELECT
+
+!-----------------------------------------------------------------------
+!     END SELECT
+!-----------------------------------------------------------------------
+
+      IF (debug> 1 ) WRITE(6,*) '### Close file'
+       istatus = nf_close(finid)                              ! Close file
+       IF (istatus /= NF_NOERR) CALL handle_err(istatus)
+     END DO patch_loop
+    END DO var_loop
 
     unlimdimlen = unlimdimlen + unlimodimlen                 ! Add # of time levels
                                                              ! in output file
-
 !-----------------------------------------------------------------------
 !
 ! Close the output file if applicable
@@ -1213,7 +1181,7 @@ SUBROUTINE  joinwrfncdf(filenames,nfile,attadj,jointime,fileconv,       &
       IF (istatus /= NF_NOERR) CALL handle_err(istatus)
     END IF
 
-  END DO
+  END DO files_loop
 
   RETURN
 END SUBROUTINE joinwrfncdf
