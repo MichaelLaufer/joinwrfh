@@ -24,12 +24,12 @@
 ! Steps to run the programs:
 !
 !  1. Compile the program
-!     $> makearps [options] joinwrfh
+!     $> ./compile.sh
 !
 !  2. Edit namelist input file - this file
 !
 !  3. Run the program
-!     $> bin/joinwrfh < input/joinwrf.input
+!     $> joinwrfh < joinwrf.input
 !
 !-----------------------------------------------------------------------
 !
